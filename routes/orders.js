@@ -22,6 +22,26 @@ const uploadToCloudinary = (buffer) => {
   });
 };
 
+// Helper: delete image from Cloudinary
+const deleteFromCloudinary = async (imageUrl) => {
+  if (!imageUrl) return;
+  try {
+    // Extract public_id from URL
+    const parts = imageUrl.split('/');
+    const folderIndex = parts.indexOf('womanhood');
+    if (folderIndex !== -1) {
+      const publicIdWithExtension = parts.slice(folderIndex).join('/');
+      const lastDotIndex = publicIdWithExtension.lastIndexOf('.');
+      const publicId = lastDotIndex !== -1 ? publicIdWithExtension.substring(0, lastDotIndex) : publicIdWithExtension;
+      if (publicId) {
+        await cloudinary.uploader.destroy(publicId);
+      }
+    }
+  } catch (error) {
+    console.error('Cloudinary delete error:', error);
+  }
+};
+
 // POST /api/orders — Create order
 router.post('/', upload.single('clothPhoto'), async (req, res) => {
   try {
@@ -121,6 +141,12 @@ router.patch('/:id', upload.single('clothPhoto'), async (req, res) => {
 
     // Upload new image if provided
     if (req.file) {
+      // Find old image to delete
+      const existingOrder = await Order.findById(req.params.id);
+      if (existingOrder && existingOrder.clothPhoto) {
+        await deleteFromCloudinary(existingOrder.clothPhoto);
+      }
+
       const result = await uploadToCloudinary(req.file.buffer);
       updates.clothPhoto = result.secure_url;
     }
@@ -211,6 +237,10 @@ router.delete('/:id', async (req, res) => {
         success: false,
         message: 'Order not found'
       });
+    }
+
+    if (order.clothPhoto) {
+      await deleteFromCloudinary(order.clothPhoto);
     }
 
     res.json({

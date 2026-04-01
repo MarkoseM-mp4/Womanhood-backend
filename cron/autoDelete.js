@@ -1,4 +1,5 @@
 const cron = require('node-cron');
+const https = require('https');
 const Order = require('../models/Order');
 
 const startCronJobs = () => {
@@ -21,6 +22,17 @@ const startCronJobs = () => {
   });
 
   console.log('⏰ Cron job scheduled: Auto-delete collected orders daily at midnight');
+
+  // Keep Render server awake by pinging it every 14 minutes
+  cron.schedule('*/14 * * * *', () => {
+    https.get('https://womanhood-backend.onrender.com/api/health', (res) => {
+      console.log(`💓 Keep-alive ping successful. Status: ${res.statusCode}`);
+    }).on('error', (e) => {
+      console.error(`💥 Keep-alive ping failed: ${e.message}`);
+    });
+  });
+  
+  console.log('⏰ Cron job scheduled: Keep-alive ping every 14 minutes');
 };
 
 module.exports = { startCronJobs };
