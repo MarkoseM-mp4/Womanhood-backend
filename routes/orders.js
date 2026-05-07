@@ -4,6 +4,7 @@ const Order = require('../models/Order');
 const authMiddleware = require('../middleware/auth');
 const upload = require('../middleware/upload');
 const cloudinary = require('../config/cloudinary');
+const { sendReadyToCollectMessage } = require('../utils/whatsapp');
 
 // All order routes are protected
 router.use(authMiddleware);
@@ -194,6 +195,14 @@ router.patch('/:id/status', async (req, res) => {
     }
 
     const updateData = { status };
+    const existingOrder = await Order.findById(req.params.id);
+
+    if (!existingOrder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
 
     // Set collectedAt when status changes to 'collected'
     if (status === 'collected') {
@@ -205,7 +214,7 @@ router.patch('/:id/status', async (req, res) => {
     const order = await Order.findByIdAndUpdate(
       req.params.id,
       updateData,
-      { new: true }
+      { new: true, runValidators: true }
     );
 
     if (!order) {
@@ -215,10 +224,25 @@ router.patch('/:id/status', async (req, res) => {
       });
     }
 
+    let whatsappNotification = null;
+
+    if (existingOrder.status !== 'ready_to_collect' && status === 'ready_to_collect') {
+      try {
+        whatsappNotification = await sendReadyToCollectMessage(order);
+      } catch (error) {
+        console.error('Ready-to-collect WhatsApp message failed:', error.details || error.message);
+        whatsappNotification = {
+          sent: false,
+          reason: 'whatsapp_send_failed'
+        };
+      }
+    }
+
     res.json({
       success: true,
       message: 'Status updated successfully',
-      order
+      order,
+      whatsappNotification
     });
   } catch (error) {
     res.status(500).json({
