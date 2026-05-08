@@ -91,11 +91,14 @@ router.post('/', upload.single('clothPhoto'), async (req, res) => {
 // GET /api/orders/search?q= — Search orders
 router.get('/search', async (req, res) => {
   try {
-    const { q } = req.query;
+    const { q, page = 1, limit = 20 } = req.query;
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+    const skip = (pageNum - 1) * limitNum;
 
     if (!q || q.trim() === '') {
-      const orders = await Order.find().sort({ createdAt: -1 }).limit(50);
-      return res.json({ success: true, orders });
+      const orders = await Order.find().sort({ createdAt: -1 }).skip(skip).limit(limitNum);
+      return res.json({ success: true, orders, hasMore: orders.length === limitNum });
     }
 
     const searchRegex = new RegExp(q.trim(), 'i');
@@ -105,9 +108,9 @@ router.get('/search', async (req, res) => {
         { phoneNumber: searchRegex },
         { serialNumber: searchRegex }
       ]
-    }).sort({ createdAt: -1 });
+    }).sort({ createdAt: -1 }).skip(skip).limit(limitNum);
 
-    res.json({ success: true, orders });
+    res.json({ success: true, orders, hasMore: orders.length === limitNum });
   } catch (error) {
     res.status(500).json({
       success: false,
