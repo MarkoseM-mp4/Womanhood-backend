@@ -48,4 +48,7 @@ const orderSchema = new mongoose.Schema({
 // Index for search
 orderSchema.index({ customerName: 'text', phoneNumber: 'text', serialNumber: 'text' });
 
+// Index for calendar queries
+orderSchema.index({ deliveryDueDate: 1, status: 1 });
+
 module.exports = mongoose.model('Order', orderSchema);
