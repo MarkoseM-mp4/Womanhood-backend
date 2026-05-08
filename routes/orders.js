@@ -116,6 +116,51 @@ router.get('/search', async (req, res) => {
   }
 });
 
+// GET /api/orders/by-date?date=YYYY-MM-DD — Pending orders due on a specific local date
+router.get('/by-date', async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ success: false, message: 'date query param required' });
+    const [y, mo, d] = date.split('-').map(Number);
+    const start = new Date(Date.UTC(y, mo - 1, d - 1, 10, 0, 0, 0));
+    const end   = new Date(Date.UTC(y, mo - 1, d + 1, 14, 0, 0, 0));
+    const allOrders = await Order.find({ deliveryDueDate: { $gte: start, $lte: end }, status: { $ne: 'collected' } }).sort({ createdAt: -1 });
+    const orders = allOrders.filter(order => {
+      const local = new Date(order.deliveryDueDate);
+      const key = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`;
+      return key === date;
+    });
+    res.json({ success: true, orders });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch orders by date' });
+  }
+});
+
+// GET /api/orders/month-orders?year=YYYY&month=MM — Pending orders grouped by local date for a month
+router.get('/month-orders', async (req, res) => {
+  try {
+    const { year, month } = req.query;
+    if (!year || !month) return res.status(400).json({ success: false, message: 'year and month required' });
+    const y = parseInt(year, 10), m = parseInt(month, 10) - 1;
+    const start = new Date(Date.UTC(y, m, 0, 10, 0, 0, 0));
+    const end   = new Date(Date.UTC(y, m + 1, 2, 14, 0, 0, 0));
+    const allOrders = await Order.find({ deliveryDueDate: { $gte: start, $lte: end }, status: { $ne: 'collected' } })
+      .select('customerName serialNumber deliveryDueDate status').sort({ deliveryDueDate: 1 });
+    const grouped = {};
+    for (const order of allOrders) {
+      const local = new Date(order.deliveryDueDate);
+      const localMonth = local.getMonth() + 1;
+      if (local.getFullYear() !== y + 0 || localMonth !== parseInt(month, 10)) continue;
+      const key = `${local.getFullYear()}-${String(localMonth).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push({ _id: order._id, customerName: order.customerName, serialNumber: order.serialNumber, status: order.status });
+    }
+    res.json({ success: true, orders: grouped });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch month orders' });
+  }
+});
+
 // GET /api/orders/:id — Single order detail
 router.get('/:id', async (req, res) => {
   try {
