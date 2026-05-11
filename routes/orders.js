@@ -46,7 +46,7 @@ const deleteFromCloudinary = async (imageUrl) => {
 // POST /api/orders — Create order
 router.post('/', upload.single('clothPhoto'), async (req, res) => {
   try {
-    const { serialNumber, customerName, phoneNumber, deliveryDueDate, notes } = req.body;
+    const { serialNumber, customerName, phoneNumber, deliveryDueDate, notes, dateGiven } = req.body;
 
     // Check duplicate serial number
     const existing = await Order.findOne({ serialNumber });
@@ -54,6 +54,18 @@ router.post('/', upload.single('clothPhoto'), async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'An order with this serial number already exists.'
+      });
+    }
+
+    // Validate due date
+    const gDate = dateGiven ? new Date(dateGiven) : new Date();
+    const dDate = new Date(deliveryDueDate);
+    gDate.setHours(0, 0, 0, 0);
+    dDate.setHours(0, 0, 0, 0);
+    if (dDate < gDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Delivery due date cannot be before the received date.'
       });
     }
 
@@ -65,14 +77,17 @@ router.post('/', upload.single('clothPhoto'), async (req, res) => {
       clothPhotoUrl = result.secure_url;
     }
 
-    const order = await Order.create({
+    const orderData = {
       serialNumber,
       customerName,
       phoneNumber,
       clothPhoto: clothPhotoUrl,
       deliveryDueDate,
       notes: notes || ''
-    });
+    };
+    if (dateGiven) orderData.dateGiven = dateGiven;
+
+    const order = await Order.create(orderData);
 
     res.status(201).json({
       success: true,
@@ -188,11 +203,28 @@ router.patch('/:id', upload.single('clothPhoto'), async (req, res) => {
   try {
     const updates = { ...req.body };
 
+    const existingOrder = await Order.findById(req.params.id);
+    if (!existingOrder) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    if (updates.deliveryDueDate) {
+      const gDate = new Date(existingOrder.dateGiven || existingOrder.createdAt);
+      const dDate = new Date(updates.deliveryDueDate);
+      gDate.setHours(0, 0, 0, 0);
+      dDate.setHours(0, 0, 0, 0);
+      if (dDate < gDate) {
+        return res.status(400).json({
+          success: false,
+          message: 'Delivery due date cannot be before the received date.'
+        });
+      }
+    }
+
     // Upload new image if provided
     if (req.file) {
       // Find old image to delete
-      const existingOrder = await Order.findById(req.params.id);
-      if (existingOrder && existingOrder.clothPhoto) {
+      if (existingOrder.clothPhoto) {
         await deleteFromCloudinary(existingOrder.clothPhoto);
       }
 
