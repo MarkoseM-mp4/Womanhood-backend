@@ -27,12 +27,12 @@ const startCronJobs = () => {
   // Run every minute — delete collected orders older than 2 minutes
   cron.schedule('* * * * *', async () => {
     try {
-      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+      const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
 
       // Find orders to delete first so we can remove their images
       const ordersToDelete = await Order.find({
         status: 'collected',
-        collectedAt: { $lt: twoMinutesAgo }
+        collectedAt: { $lt: twoDaysAgo }
       });
 
       if (ordersToDelete.length === 0) return;
@@ -49,14 +49,14 @@ const startCronJobs = () => {
       const result = await Order.deleteMany({ _id: { $in: idsToDelete } });
 
       if (result.deletedCount > 0) {
-        console.log(`🗑️  Auto-deleted ${result.deletedCount} collected order(s) older than 2 minutes.`);
+        console.log(`🗑️  Auto-deleted ${result.deletedCount} collected order(s) older than 2 days.`);
       }
     } catch (error) {
       console.error('❌ Cron job error:', error.message);
     }
   });
 
-  console.log('⏰ Cron job scheduled: Auto-delete collected orders every minute');
+  console.log('⏰ Cron job scheduled: Auto-delete collected orders every minute (checking for > 2 days old)');
 
   // Keep Render server awake by pinging it every 14 minutes
   cron.schedule('*/14 * * * *', () => {
